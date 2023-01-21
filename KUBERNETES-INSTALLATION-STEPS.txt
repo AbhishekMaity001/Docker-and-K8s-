@@ -38,7 +38,7 @@ WE NEED THIS BECAUSE MASTER SE SLAVE BINA PASSWORD SE CHALA JAYE... after this y
 		Congratulations!!! now you have LOGGED IN to the worker node!
 
 Step 4 : systemctl disable firewalld; systemctl stop firewalld
-Step 5 : setenforce 0 or getenforce to check ... or vim /etc/sysconfig/selinux
+Step 5 : setenforce=0 or getenforce to check ... or vim /etc/sysconfig/selinux
 		 swapon -s (to check swap memory)
 		 swapoff -a (deleting swap memory concept from linux) 
 		 
