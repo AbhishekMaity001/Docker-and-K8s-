@@ -1,0 +1,170 @@
+KUBERNETES INSTALLATION STEPS :-
+First create 2 VM & select 2 cpu bcoz master requires 2 cpus minimum
+Then change the hostnames in master and worker both 
+
+------ Static IP ------
+vim  /etc/sysconfig/network-scripts/ifcfg-enp0s3
+BOOTPROTO=static  # update this from dchp to static
+IPADDR=192.168.1.8
+NETMASK=255.255.255.0
+GATEWAY=192.168.1.1
+DNS1=192.168.1.1
+
+
+vim /etc/hosts  --- add the ip then space then your hostname
+hostnamectl set-hostname master.tg.com
+hostnamectl set-hostname worker1.tg.com
+
+bash (this will compile update your hostname)
+ping master.tg.com
+
+Step 1: 
+	yum install -y yum-utils device-mapper-persistant-data lvm2
+
+Step 2:
+	yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
+
+Step 3:
+	yum install docker-ce-18* -y
+									Afer that just do CHECK --- ls -l /etc/yum.repos.d/
+	systemctl start docker; systemctl enable docker; systemctl status docker
+	docker info (see the server w.r.t that version only install the k8)
+	
+Step 3.1:	Create SSH keygen (Master Node ---> Worker Node) ONLY RUN this on MASTER NODE 
+			ssh-keygen -t rsa
+			ssh-copy-id -i /root/.ssh/id_rsa.pub  root@192.168.29.116.7   <---- worker ip address
+WE NEED THIS BECAUSE MASTER SE SLAVE BINA PASSWORD SE CHALA JAYE... after this you can login into worker node from the master node.
+		Now if you just do ssh root@192.168.29.116.7   <---- worker ip address
+		Congratulations!!! now you have LOGGED IN to the worker node!
+
+Step 4 : systemctl disable firewalld; systemctl stop firewalld
+Step 5 : setenforce 0 or getenforce to check ... or vim /etc/sysconfig/selinux
+		 swapon -s (to check swap memory)
+		 swapoff -a (deleting swap memory concept from linux) 
+		 
+		 -- to permanent delete the swap memory from linux then do this...
+		 vim /etc/fstab     then just comment out with # the line for the swap memory 
+		 mount -a to compile
+
+
+Step 6: 
+cat <<EOF > /etc/sysctl.d/k8s.conf
+net.bridge-nf-call-ip6tables=1
+net.bridge-nf-call-iptables=1
+EOF
+
+cat <<EOF | sudo tee /etc/sysctl.d/k8s.conf
+net.bridge.bridge-nf-call-ip6tables = 1
+net.bridge.bridge-nf-call-iptables = 1
+EOF
+sudo sysctl --system
+
+Step 6.1:
+sysctl --system  .....Run this command to apply the changes in
+
+Step 7: (Create Kubernetes repo https://phoenixnap.com/kb/how-to-install-kubernetes-on-centos):
+cat <<EOF > /etc/yum.repos.d/kubernetes.repo
+[kubernetes]
+name=Kubernetes
+baseurl=https://packages.cloud.google.com/yum/repos/kubernetes-el7-x86_64
+enabled=1
+gpgcheck=1
+repo_gpgcheck=1
+gpgkey=https://packages.cloud.google.com/yum/doc/yum-key.gpg https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg
+EOF
+
+ls -l /etc/yum.repos.d/      (You will see the kubernetes.repo in the end)
+
+Step 8: INSTALLING KUBELET, KUBEADM, KUBECTL ... Run on both the nodes master & slave/worker
+	yum install -y kubelet-1.18* kubeadm-1.18* kubectl-1.18*
+	systemctl enable kubelet; systemctl start kubelet; systemctl status kubelet
+	
+Step 9:(ONLY ON MASTER NODE).... if any error comes then just do 
+rm /etc/containerd/config.toml
+systemctl restart containerd
+	kubeadm init
+	
+	mkdir -p $HOME/.kube
+    cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+    chown $(id -u):$(id -g) $HOME/.kube/config
+	
+	Run this type of command which will be generated.... run this in worker node to get attached to your master node...
+	kubeadm join 192.168.29.157:6443 --token esvsc6.syw52fkd1i5pgp2v \
+        --discovery-token-ca-cert-hash sha256:7e05b049d3a8588734b92b3595251afef39f709e587c776711e3d8abf78e228d
+	
+Step 10: Download weave net go to site ---(https://weave.works/docs/net/latest/kubernetes/kube-addon/)
+		OUTDATED.....
+		kubectl apply -f "https://cloud.weave.works/k8s/net?k8s-version=$(kubectl version | base64 | tr -d '\n')" 
+		
+		LATEST...
+		kubectl apply -f https://github.com/weaveworks/weave/releases/download/v2.8.1/weave-daemonset-k8s.yaml
+		
+
+
+--------------------------------------------ADDITIONAL DEBUGGING HELPS-------------------------------------------------------------------------
+
+RESTART KUBELET:
+/etc/init.d/kubelet restart
+			
+kubeadm join 192.168.1.13:6443 --token r9wqhq.p8fw1n7byp423twe --discovery-token-ca-cert-hash sha256:5a61422bd76828b8cc439823175431779d7c61762b88d1157cf7dab85bbab82f
+
+
+To create kubeadm join command, please run the following commands:
+https://stackoverflow.com/questions/51126164/how-do-i-find-the-join-command-for-kubeadm-on-the-master
+
+Step 1 - Retrieve Token CA Hash:
+openssl x509 -pubkey -in /etc/kubernetes/pki/ca.crt \
+    | openssl rsa -pubin -outform der 2>/dev/null \
+    | openssl dgst -sha256 -hex \
+    | sed 's/^.* //'
+
+Step 2 - Retrieve bootstrap Tokens:
+kubeadm token list
+	
+kubeadm token create --print-join-command --certificate-key $(kubeadm alpha certs certificate-key)
+kubeadm token create --print-join-command
+This command will generate the new token as well as the join command which you can use at your worker node to join the cluster
+
+Step 3 - Creates kubeadm init command:
+
+Now use following syntax to create join command without creating a new token:
+
+kubeadm join <ip-address>:6443\
+    --token=<token-from-step-2> \
+    --discovery-token-ca-cert-hash sha256:<ca-hash-from-step-1>
+	
+
+kubeadm token create command creates a new token, in this case without any description,
+so for you not to create any additional tokens, just pick the token which has a DESCRIPTION as mentioned in Step 2.
+	
+
+
+------------STATIC_IP------------------------------
+vim  /etc/sysconfig/network-scripts/ifcfg-enp0s3
+
+TYPE=Ethernet
+PROXY_METHOD=none
+BROWSER_ONLY=no
+BOOTPROTO=static
+DEFROUTE=yes
+IPV4_FAILURE_FATAL=no
+IPV6INIT=yes
+IPV6_AUTOCONF=yes
+IPV6_DEFROUTE=yes
+IPV6_FAILURE_FATAL=no
+IPV6_ADDR_GEN_MODE=stable-privacy
+NAME=enp0s3
+UUID=8386e10a-e622-4084-82f6-d680a396f5bb
+DEVICE=enp0s3
+ONBOOT=yes
+
+IPADDR=192.168.1.8
+NETMASK=255.255.255.0
+GATEWAY=192.168.1.1
+DNS1=192.168.1.1
+
+
+
+
+
+	
